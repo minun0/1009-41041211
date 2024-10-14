@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配對遊戲</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 36px;
+            color: #333;
+            margin: 0 0 20px;
+        }
+
+        .cards-grid {
+            display: grid;
+            gap: 20px;
+            display: none;
+        }
+
+        .card-container {
+            perspective: 1000px;
+        }
+
+        .card {
+            width: 150px;
+            height: 170px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+
+        .card-front,
+        .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 10px;
+        }
+
+        .card-front {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #09b054;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-back {
+            background-color: #ffffff;
+            transform: rotateY(180deg);
+        }
+
+        .card-back img {
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+        }
+
+        .card.flip {
+            transform: rotateY(180deg);
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            cursor: pointer;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+
+        #startGameBtn {
+            background-color: #17a2b8;
+        }
+
+        #showFrontBtn {
+            background-color: #007bff;
+        }
+
+        #showBackBtn {
+            background-color: #28a745;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        #countdown,
+        #timer {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+
+    <h1>配對遊戲</h1>
+
+    <div class="controls">
+        <select id="themeSelector">
+            <option value="food">食物主題</option>
+            <option value="fish">魚類主題</option>
+            <option value="mixed">混合模式</option>
+        </select>
+        <select id="sizeSelector">
+            <option value="2x2">2x2</option>
+            <option value="4x4">4x4</option>
+            <option value="6x6">6x6</option>
+        </select>
+        <select id="countdownSelector">
+            <option value="1">1秒</option>
+            <option value="5">5秒</option>
+            <option value="10" selected>10秒</option>
+            <option value="15">15秒</option>
+        </select>
+        <button id="startGameBtn" onclick="startGame()">開始遊戲</button>
+        <button id="showFrontBtn" onclick="showFront()">顯示正面</button>
+        <button id="showBackBtn" onclick="showBack()">顯示背面</button>
+    </div>
+
+    <div id="countdown"></div>
+    <div id="timer">時間：0.0 秒</div>
+
+    <div class="cards-grid" id="cardsGrid"></div>
+    <!-- 翻牌、配對成功跟失敗音效 -->
+    <audio id="flipSound" src="audio/flip.mp3"></audio>
+    <audio id="matchSound" src="audio/match.mp3"></audio>
+    <audio id="noMatchSound" src="audio/noMatch.mp3"></audio>
+
+    <script>
+        const themes = {
+            food: [
+                'image/food1.png',
+                'image/food2.png',
+                'image/food3.png',
+                'image/food4.png',
+                'image/food5.png',
+                'image/food6.png',
+                'image/food7.png',
+                'image/food8.png',
+                'image/food9.png',
+                'image/food10.png',
+                'image/food11.png',
+                'image/food12.png',
+                'image/food13.png',
+                'image/food14.png',
+                'image/food15.png',
+                'image/food16.png',
+                'image/food17.png',
+                'image/food18.png'
+            ],
+            fish: [
+                'image/fish1.png',
+                'image/fish2.png',
+                'image/fish3.png',
+                'image/fish4.png',
+                'image/fish5.png',
+                'image/fish6.png',
+                'image/fish7.png',
+                'image/fish8.png',
+                'image/fish9.png',
+                'image/fish10.png',
+                'image/fish11.png',
+                'image/fish12.png',
+                'image/fish13.png',
+                'image/fish14.png',
+                'image/fish15.png',
+                'image/fish16.png',
+                'image/fish17.png',
+                'image/fish18.png'
+            ]
+        };
+
+        let selectedTheme = 'food';
+        let cardImages = [];
+        let firstCard = null;
+        let secondCard = null;
+        let lockBoard = false;
+        let matchedPairs = 0;
+        let startTime;
+        let countdownInterval;
+        let gameTimerInterval;
+        let timerRunning = false;
+
+        const flipSound = document.getElementById('flipSound');
+
+        document.getElementById('themeSelector').addEventListener('change', function (event) {
+            selectedTheme = event.target.value;
+        });
+
+        const cardsGrid = document.getElementById('cardsGrid');
+        const countdownElement = document.getElementById('countdown');
+        const timerElement = document.getElementById('timer');
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function getRandomImages(count) {
+            if (selectedTheme === 'mixed') {
+                const foodImages = shuffle([...themes.food]);
+                const fishImages = shuffle([...themes.fish]);
+                const selectedFoodImages = foodImages.slice(0, count / 2); // 取一半的食物圖像
+                const selectedFishImages = fishImages.slice(0, count / 2); // 取一半的魚類圖像
+                return shuffle(selectedFoodImages.concat(selectedFishImages)); // 合併並隨機排序
+            } else {
+                const shuffledImages = shuffle([...themes[selectedTheme]]);
+                return shuffledImages.slice(0, count);
+            }
+        }
+
+        function createCards() {
+            cardsGrid.innerHTML = '';
+            matchedPairs = 0;
+
+            const size = document.getElementById('sizeSelector').value;
+            let rows, cols;
+
+            switch (size) {
+                case '2x2':
+                    rows = 2;
+                    cols = 2;
+                    break;
+                case '4x4':
+                    rows = 4;
+                    cols = 4;
+                    break;
+                case '6x6':
+                    rows = 6;
+                    cols = 6;
+                    break;
+            }
+
+            const selectedImages = getRandomImages((rows * cols) / 2);
+            cardImages = selectedImages.concat(selectedImages); // 每個圖像成對出現
+            cardImages = shuffle(cardImages); // 隨機排序
+
+            cardsGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+            cardImages.forEach((imageSrc, index) => {
+                const cardContainer = document.createElement('div');
+                cardContainer.classList.add('card-container');
+
+                const card = document.createElement('div');
+                card.classList.add('card');
+
+                const cardFront = document.createElement('div');
+                cardFront.classList.add('card-front');
+
+                const cardBack = document.createElement('div');
+                cardBack.classList.add('card-back');
+
+                const img = document.createElement('img');
+                img.src = imageSrc;
+                img.alt = `Image ${index + 1}`;
+                cardBack.appendChild(img);
+
+                card.appendChild(cardFront);
+                card.appendChild(cardBack);
+
+                cardContainer.addEventListener('click', function () {
+                    flipCard(card);
+                });
+
+                cardContainer.appendChild(card);
+                cardsGrid.appendChild(cardContainer);
+            });
+        }
+
+        function flipCard(cardElement) {
+            if (lockBoard) return; // 如果鎖定，則不執行
+            if (cardElement === firstCard) return; // 如果再次點擊已翻開的卡片，不執行
+
+            flipSound.play(); // 翻牌時播放音效
+            cardElement.classList.add('flip');
+
+            if (!firstCard) {
+                firstCard = cardElement; // 記錄第一張翻開的卡片
+                return;
+            }
+
+            secondCard = cardElement; // 記錄第二張翻開的卡片
+            lockBoard = true; // 鎖定翻牌板
+            checkForMatch(); // 檢查是否配對
+        }
+
+        function checkForMatch() {
+            const isMatch = firstCard.querySelector('img').src === secondCard.querySelector('img').src;
+
+            if (isMatch) {
+                matchSound.play(); // 播放配對成功音效
+                matchedPairs++;
+
+                // 先保持卡片可見，然後延遲後隱藏
+                setTimeout(() => {
+                    firstCard.parentElement.style.visibility = 'hidden'; // 隱藏第一張卡片
+                    secondCard.parentElement.style.visibility = 'hidden'; // 隱藏第二張卡片
+                    resetCards();
+                    if (matchedPairs === cardImages.length / 2) {
+                        endGame();
+                    }
+                }, 1000); // 1秒後隱藏，可以根據需求調整這個時間
+            } else {
+                noMatchSound.play(); // 播放配對失敗音效
+                unflipCards();
+            }
+        }
+
+        function unflipCards() {
+            lockBoard = true; // 鎖定翻牌板
+
+            setTimeout(() => {
+                firstCard.classList.remove('flip'); // 移除第一張卡片的翻轉效果
+                secondCard.classList.remove('flip'); // 移除第二張卡片的翻轉效果
+                resetCards(); // 重置卡片狀態
+            }, 1000); // 1秒後翻回
+        }
+
+
+        function resetCards() {
+            [firstCard, secondCard] = [null, null];
+            lockBoard = false;
+        }
+
+        function showFront() {
+            document.querySelectorAll('.card').forEach(card => {
+                card.classList.remove('flip');
+            });
+        }
+
+        function showBack() {
+            document.querySelectorAll('.card').forEach(card => {
+                card.classList.add('flip');
+            });
+        }
+
+        function startGame() {
+            clearInterval(countdownInterval); // 清除倒計時
+            clearInterval(gameTimerInterval); // 清除遊戲計時
+            timerElement.textContent = '時間：0.0 秒'; // 重置計時器顯示
+            timerRunning = false; // 重置計時器狀態
+
+            createCards(); // 創建卡片
+            cardsGrid.style.display = 'grid'; // 顯示卡片網格
+            showBack(); // 顯示卡片背面
+            startCountdown(); // 開始倒計時
+        }
+
+
+        function startCountdown() {
+            let countdownTime = parseInt(document.getElementById('countdownSelector').value); // 使用選擇的倒計時時間
+            countdownElement.textContent = `倒數計時：${countdownTime} 秒`;
+
+            countdownInterval = setInterval(() => {
+                countdownTime--;
+                countdownElement.textContent = `倒數計時：${countdownTime} 秒`;
+
+                if (countdownTime <= 0) {
+                    clearInterval(countdownInterval);
+                    showFront(); // 倒計時結束後顯示正面
+                    startTimer(); // 開始遊戲計時
+                }
+            }, 1000);
+        }
+
+        function startTimer() {
+            if (timerRunning) return; // 如果計時器已在運行，則不再啟動
+            timerRunning = true;
+            startTime = Date.now();
+
+            gameTimerInterval = setInterval(() => {
+                const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(1);
+                timerElement.textContent = `時間：${elapsedTime} 秒`;
+            }, 100);
+        }
+
+        function endGame() {
+            clearInterval(gameTimerInterval); // 遊戲結束時清除計時器
+            Swal.fire({
+                title: '遊戲結束！',
+                text: `恭喜你完成所有配對！用時：${timerElement.textContent.split('：')[1]}`,
+                icon: 'success',
+                confirmButtonText: '再來一次'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    resetGame();
+                }
+            });
+        }
+
+        function resetGame() {
+            clearInterval(countdownInterval);
+            countdownElement.textContent = '';
+            timerElement.textContent = '時間：0.0 秒';
+            timerRunning = false; // 重置計時器狀態
+            matchedPairs = 0;
+            cardsGrid.innerHTML = ''; // 清空卡片
+            cardsGrid.style.display = 'none'; // 隱藏卡片網格
+        }
+    </script>
+
+</body>
+
+</html>
